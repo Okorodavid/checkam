@@ -185,8 +185,11 @@ async def meterless_route(settings: Settings, client: httpx.AsyncClient) -> str:
             raise PermissionError("Nightshift rejected the runtime token (copy it again from Nightshift's Console)")
         r.raise_for_status()
         ids = [m.get("id", "") for m in r.json().get("data", [])]
-        nemotron = [i for i in ids if "nemotron" in i.lower()]
-        _routes[base] = nemotron[0] if nemotron else ("meterless/auto" if "meterless/auto" in ids or not ids else ids[0])
+        # Our tested cloud Nemotron chat models first; never an embedding model or a local lane this machine can't run.
+        preferred = [m for m in dict.fromkeys([settings.nvidia_model, *NEMOTRON]) if m in ids]
+        chat = [i for i in ids if "nemotron" in i.lower() and not i.startswith("local-")
+                and not re.search(r"embed|rerank|safety|parse", i)]
+        _routes[base] = (preferred or chat or ["meterless/auto"])[0]
     return _routes[base]
 
 

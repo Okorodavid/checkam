@@ -5,8 +5,8 @@ Record in two parts and join them: your phone screen (Android: swipe down > Scre
 Before recording:
 
 1. Nightshift is open with the NVIDIA provider connected and a Nemotron lane active.
-2. Zetaris is running (`docker compose ps --all` in the zetaris-platform folder), and `python -m checkam zetaris` printed "Data layer: Zetaris (...)".
-3. On the laptop: `python -m checkam run`. The log should say "Data layer: Zetaris" and "Reasoning with: meterless". Keep it plugged in and awake.
+2. Zetaris isn't installed yet, so the trace says "sample mode". Show the Zetaris code instead (step below).
+3. On the laptop: `python -m checkam run`. The log should say "Reasoning with: meterless". Keep it plugged in and awake.
 4. For the group scene: in @BotFather send `/setprivacy`, pick the bot, choose **Disable**. Make a Telegram group with one other person, then add the bot. If it was already in the group, remove it and add it again.
 5. Copy the messages below into your phone's notes.
 6. Each check takes 10 to 30 seconds. The bot shows "🔎 Checking…" at once. Cut the wait when you edit.
@@ -19,8 +19,8 @@ Before recording:
 | 0:55-1:15 | Phone: send the CBEX message | "Investment schemes too. SEC Nigeria publicly warned about CBEX, and CheckAm cites the SEC's own notice." |
 | 1:15-1:30 | Phone: the Pidgin NNPC message, then the Pidgin reply | "It answers in the language you write in. Pidgin in, Pidgin out." |
 | 1:30-1:45 | Phone: the family group, someone posts a scam link, CheckAm warns | "In a family group it stays quiet, and only speaks up when something looks like a scam." |
-| 1:45-2:10 | Laptop: Zetaris SQL Editor at localhost:3000, run `SELECT name, domains FROM checkam.official_accounts` and `SELECT name, title FROM checkam.sec_notices` | "Under the hood, Zetaris is the data layer. The real websites of 37 Nigerian banks and agencies, and every operator the SEC has warned about, are tables in Zetaris. CheckAm loads them with SQL, so every 'this isn't the real company' answer comes from there." |
-| 2:10-2:35 | Laptop: Nightshift's lanes with the Nemotron model, then the terminal running `python -m checkam check "<OPay message>"` scrolled to the agent trace | "The reasoning runs on NVIDIA Nemotron through Meterless Nightshift. Here's the trace: the data came from Zetaris, Nemotron drafted the verdict, and an evaluator checked that every reason cites real evidence. If it doesn't, the evaluator sends it back for a fix." |
+| 1:45-2:10 | Laptop: open `checkam/data/zetaris_setup.sql` on GitHub, then `checkam/zetaris.py` | "The facts behind every answer, the real websites of 37 Nigerian banks and agencies and every operator the SEC has warned about, are set up as Zetaris tables and loaded with SQL. Tonight it's running in sample mode from the same files, because the Zetaris install didn't finish on my connection." |
+| 2:10-2:35 | Laptop: Nightshift's lanes with the Nemotron model, then the terminal running `python -m checkam check "<OPay message>"` scrolled to the agent trace | "The reasoning runs on NVIDIA Nemotron through Meterless Nightshift. Here's the trace: Nemotron, through Nightshift, drafted the verdict, and an evaluator checked that every reason cites real evidence. If it doesn't, the evaluator sends it back for a fix." |
 | 2:35-3:00 | Laptop: run `python -m checkam check "Send 5000 to 8123456789 to claim your grant"` and point at the "CheckAm memory (H-MEM)" finding | "CheckAm also remembers, using the Meterless H-MEM memory engine. My mum's message had this account number. Now anyone who gets a message with the same account is told someone already reported it. It stores the account number, never the message." |
 | 3:00-3:15 | Phone: the red verdict again | "Check am before you pay." |
 

@@ -11,8 +11,9 @@ import httpx
 
 from .config import Settings
 from .evidence import Entities, Evidence, extract, host_of, registrable_domain
+from .hmem import HMEM
 from .reasoner import Verdict, decide
-from .sources import links, official, patterns, regulators, reports, threats, websearch
+from .sources import links, memory, official, patterns, regulators, threats, websearch
 from .store import Store
 
 log = logging.getLogger("checkam.agent")
@@ -28,9 +29,11 @@ class Report:
 
 
 class Checker:
-    def __init__(self, settings: Settings, store: Store, client: httpx.AsyncClient | None = None):
+    def __init__(self, settings: Settings, store: Store, client: httpx.AsyncClient | None = None,
+                 hmem: HMEM | None = None):
         self.settings = settings
         self.store = store
+        self.hmem = hmem or HMEM(store.path)  # H-MEM tables live in the same SQLite file
         self.client = client or httpx.AsyncClient(headers={"User-Agent": links.UA["User-Agent"]})
 
     async def aclose(self) -> None:
@@ -60,7 +63,7 @@ class Checker:
         evidence += threats.check(ents, self.store)
         evidence += official.check(ents)
         evidence += regulators.check(ents, topics, self.store)
-        evidence += reports.check(ents, self.store, user)
+        evidence += memory.check(ents, self.hmem, user)  # replaces reports.check: same signal, now from H-MEM
 
         slow = await asyncio.gather(
             links.check(ents, self.store, self.client),
@@ -81,6 +84,7 @@ class Checker:
 
         verdict = await decide(self.settings, message, evidence, self.client)
         self.store.record(platform, user, ents.lookups(), verdict.verdict)
+        memory.remember(self.hmem, ents, verdict.verdict, platform, user)
         return Report(message, ents, evidence, verdict, time.monotonic() - started)
 
 

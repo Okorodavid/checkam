@@ -99,5 +99,50 @@ async def test_nemotron_falls_back_when_a_model_is_not_served():
         return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(nvidia)) as client:
-        _, model = await ask_nvidia(Settings(nvidia_api_key="k"), "hi", [], client)
+        _, model = await ask_nvidia(Settings(nvidia_api_key="k"), [], client)
     assert asked[:2] == NEMOTRON[:2] and model == NEMOTRON[1]
+
+
+async def test_nightshift_is_the_primary_provider_and_picks_a_nemotron_route():
+    import httpx
+    from checkam.config import Settings
+    from checkam.reasoner import decide
+    seen = []
+    good = json.dumps({"verdict": "scam", "headline": "Scam", "advice": "Don't pay.",
+                       "reasons": [{"text": "Fee first.", "evidence": ["E1"]}]})
+
+    def nightshift(request):
+        seen.append((request.method, request.url.path, request.headers.get("meterless-app")))
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "meterless/auto"}, {"id": "meterless/nemotron-fast"}]})
+        assert json.loads(request.content)["model"] == "meterless/nemotron-fast"
+        return httpx.Response(200, json={"model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+                                         "choices": [{"message": {"content": good}}]})
+
+    settings = Settings(meterless_runtime_token="token", meterless_base_url="http://nightshift.test/v1", nvidia_api_key="k")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(nightshift)) as client:
+        v = await decide(settings, MUM, ev(("fee first", SCAM, 3)), client)
+    assert v.reasoner == "meterless:nvidia/nemotron-3.5-lightning-30b-a3b"
+    assert all(app == "checkam" for _, _, app in seen)
+    assert "evaluator: accepted" in v.trace[0]
+
+
+async def test_evaluator_sends_a_bad_draft_back_for_one_revision():
+    import httpx
+    from checkam.config import Settings
+    from checkam.reasoner import decide
+    drafts = [
+        {"verdict": "scam", "headline": "Scam", "advice": "Don't pay.",
+         "reasons": [{"text": "Fee first.", "evidence": ["E1"]}, {"text": "Made up.", "evidence": ["E9"]}]},
+        {"verdict": "scam", "headline": "Scam", "advice": "Don't pay.", "reasons": [{"text": "Fee first.", "evidence": ["E1"]}]},
+    ]
+    asked = []
+
+    def nvidia(request):
+        asked.append(json.loads(request.content)["messages"][-1]["content"])
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(drafts[len(asked) - 1])}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(nvidia)) as client:
+        v = await decide(Settings(nvidia_api_key="k"), MUM, ev(("fee first", SCAM, 3)), client)
+    assert len(asked) == 2 and "previous reply had problems" in asked[1]
+    assert v.notes == [] and len(v.trace) == 2 and v.trace[1].endswith("evaluator: accepted")

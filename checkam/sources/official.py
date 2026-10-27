@@ -26,8 +26,21 @@ class Org:
         return self.domains[0] if self.domains else ""
 
 
-@lru_cache(maxsize=1)
+_from_data_layer: tuple[Org, ...] = ()
+
+
+def use(orgs: list[Org]) -> None:
+    """Serve the list from the data layer (Zetaris) instead of the bundled file."""
+    global _from_data_layer
+    _from_data_layer = tuple(orgs)
+
+
 def registry() -> tuple[Org, ...]:
+    return _from_data_layer or _bundled()
+
+
+@lru_cache(maxsize=1)
+def _bundled() -> tuple[Org, ...]:
     raw = json.loads(DATA.read_text(encoding="utf-8"))["orgs"]
     return tuple(Org(o["name"], o["kind"], tuple(a.lower() for a in o["aliases"]),
                      tuple(d.lower() for d in o["domains"]), tuple(h.lower() for h in o["x"])) for o in raw)

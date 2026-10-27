@@ -1,8 +1,9 @@
-"""CLI: check, refresh, stats, run.
+"""CLI: check, refresh, stats, run, zetaris.
 
   python -m checkam check "Congrats! Pay N5,000 to unlock your loan: opay-loans.xyz"
   python -m checkam refresh        # download phishing blocklists + SEC notices
   python -m checkam run            # start every chat platform that has a token in .env
+  python -m checkam zetaris        # register CheckAm's data in Zetaris and check it loads
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import httpx
 from .agent import Checker
 from .config import load_settings
 from .render import chat_text, detail_text
+from . import zetaris
 from .sources import regulators, threats
 from .store import Store
 
@@ -34,6 +36,7 @@ def _utf8() -> None:
 async def _check(settings, store, text: str, as_json: bool, short: bool) -> None:
     checker = Checker(settings, store)
     try:
+        zetaris.loaded_from = await zetaris.load(settings, checker.client)
         report = await checker.check(text)
     finally:
         await checker.aclose()
@@ -42,7 +45,7 @@ async def _check(settings, store, text: str, as_json: bool, short: bool) -> None
         print(json.dumps({
             "verdict": v.verdict, "headline": v.headline, "advice": v.advice, "reasoner": v.reasoner,
             "reasons": [{"text": r.text, "evidence": r.evidence} for r in v.reasons],
-            "evidence": [e.__dict__ for e in report.evidence], "notes": v.notes, "seconds": round(report.seconds, 2),
+            "evidence": [e.__dict__ for e in report.evidence], "notes": v.notes, "trace": v.trace, "seconds": round(report.seconds, 2),
         }, indent=2, ensure_ascii=False))
     else:
         print(chat_text(report) if short else detail_text(report))
@@ -55,6 +58,21 @@ async def _refresh(store) -> None:
             print(f"{name}: {n:,} entries")
         n = await regulators.refresh(store, client)
         print(f"SEC Nigeria notices: {n} saved ({store.notice_count()} in index)")
+        rows = store.warned_aliases()
+        if rows:
+            zetaris.export_notices(rows)
+            print(f"Exported {len(rows)} operator names to {zetaris.NOTICES.name} for Zetaris")
+
+
+async def _zetaris(settings) -> int:
+    if not settings.zetaris_api_key:
+        print("Set ZETARIS_API_KEY (and ZETARIS_REST_URL if not http://localhost:8888/api/v1.0) in .env first.")
+        return 1
+    async with httpx.AsyncClient() as client:
+        for line in await zetaris.setup(settings, client):
+            print(line)
+        print("Data layer:", await zetaris.load(settings, client))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("stats", help="checks per verdict")
     s.add_argument("--days", type=float, default=7)
     sub.add_parser("run", help="start Telegram, Discord and WhatsApp (whichever have tokens)")
+    sub.add_parser("zetaris", help="register CheckAm's data in Zetaris and check it loads")
     p.add_argument("--env", default=".env")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
@@ -87,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "stats":
         stats = store.stats(time.time() - args.days * 86400)
         print(json.dumps(stats, indent=2) if stats else "No checks yet.")
+    elif args.cmd == "zetaris":
+        return asyncio.run(_zetaris(settings))
     elif args.cmd == "run":
         from .serve import serve
         if not (settings.telegram_token or settings.discord_token or settings.whatsapp_token):

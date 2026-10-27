@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from . import zetaris
 from .agent import Checker
 from .config import Settings
 from .store import Store
@@ -16,6 +17,8 @@ async def serve(settings: Settings, store: Store) -> None:
     checker = Checker(settings, store)
     stops = []
     try:
+        zetaris.loaded_from = await zetaris.load(settings, checker.client)
+        log.info("Data layer: %s", zetaris.loaded_from)
         if settings.whatsapp_token:
             from aiohttp import web
 

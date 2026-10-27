@@ -34,8 +34,20 @@ NOT_A_WARNING = re.compile(r"(?i)(dividend|penalt|fidelity bond|implementation|i
                            r"postpone|scorecard|retail foreign exchange|warrants|^\d|^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))")
 
 
-@lru_cache(maxsize=1)
+_from_data_layer: dict = {}
+
+
+def use(warned: list[dict], rules: list[dict], notices: list[tuple[str, str, str, str, str]]) -> None:
+    """Serve warnings, rules and SEC notices from the data layer (Zetaris) instead of the bundled file and local index."""
+    _from_data_layer.update(warned=warned, rules=rules, notices=notices)
+
+
 def snapshot() -> dict:
+    return _from_data_layer or _bundled()
+
+
+@lru_cache(maxsize=1)
+def _bundled() -> dict:
     return json.loads(DATA.read_text(encoding="utf-8"))
 
 
@@ -51,7 +63,7 @@ def check(ents: Entities, topics: set[str], store: Store) -> list[Evidence]:
         if any(_found(a, text) for a in w["aliases"]):
             named.add(w["name"].lower())
             out.append(Evidence(w["regulator"], w["finding"], SCAM, 4, w["url"]))
-    for alias, name, title, url, regulator in store.warned_aliases():
+    for alias, name, title, url, regulator in _from_data_layer.get("notices") or store.warned_aliases():
         if name.lower() in named or not _found(alias, text):
             continue
         named.add(name.lower())

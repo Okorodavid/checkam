@@ -43,4 +43,6 @@ def detail_text(report: Report) -> str:
         lines.append(f"{e.id} [{e.signal}/{e.weight}] {e.source}: {e.finding}" + (f" <{e.url}>" if e.url else ""))
     for n in v.notes:
         lines.append(f"note: {n}")
+    from . import zetaris
+    lines += ["--- agent trace ---", f"data layer: {zetaris.loaded_from}", *v.trace]
     return "\n".join(lines)

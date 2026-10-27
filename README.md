@@ -34,18 +34,30 @@ Every message goes through the same steps. Each source looks at one thing and re
 |---|---|---|
 | **Message check** | Known Nigerian scam patterns: pay-to-unlock, "send your OTP", guaranteed returns, pay-to-apply jobs and grants, fake credit alerts, threats, fake customer care | nothing |
 | **Link safety** | 153,000+ known phishing sites (Phishing Army) and live phishing URLs (OpenPhish); link tricks: brand names bolted onto other sites, look-alike letters, bare IP addresses, `.apk` downloads, short links (expanded to see where they really go), free page hosts | nothing; Google Safe Browsing and URLhaus optional |
-| **Official accounts list** | 37 Nigerian banks, fintechs, telecoms and agencies with their real websites and X accounts. Catches `opay-loans.xyz`, `gtbamk.com` and `@gtbank_care` | nothing |
+| **Official accounts list** (Zetaris) | 37 Nigerian banks, fintechs, telecoms and agencies with their real websites and X accounts. Catches `opay-loans.xyz`, `gtbamk.com` and `@gtbank_care` | nothing |
 | **Domain record (RDAP)** | When the website was registered. Scam sites are usually days old | nothing |
-| **Regulators** | SEC Nigeria's published "Illegal Operator" warnings (CBEX, ZugaCoin, MMM, AfriQuantumX and more, pulled live from sec.gov.ng), plus SEC and FCCPC rules on investments and loan apps | nothing |
-| **Other CheckAm users** | Has anyone else sent the same account number, phone, website or handle in the last 30 days? One person's report warns the next | nothing |
+| **Regulators** (Zetaris) | SEC Nigeria's published "Illegal Operator" warnings (CBEX, ZugaCoin, MMM, AfriQuantumX and more, pulled live from sec.gov.ng), plus SEC and FCCPC rules on investments and loan apps | nothing |
+| **CheckAm memory (Meterless H-MEM)** | Has anyone else sent the same account number, phone, website or handle? One person's check warns the next, across sessions | nothing |
 | **Web and X search** | What news sites and posts on X say about the company or site | Tavily key (free tier) |
 
-Then a reasoning model reads the numbered findings and writes the verdict:
+Then the agent decides:
 
-- **NVIDIA Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b` on build.nvidia.com) is the main reasoner. Gemini is the fallback. With no key at all, built-in rules decide.
-- **Every reason must cite finding ids.** Reasons that cite nothing, or cite a finding that doesn't exist, are dropped before anyone sees them. The model can connect findings but can't invent them.
+- **Nemotron drafts the verdict through Meterless Nightshift**, the primary AI provider. CheckAm picks a Nemotron-backed route from Nightshift's model list. Fallbacks: NVIDIA's API directly (`nvidia/nemotron-3-ultra-550b-a55b`), then Gemini, then built-in rules.
+- **An evaluator checks the draft.** Is it valid? Does every reason cite real finding ids? Does it clash with decisive evidence? If not, the problems go back to the model for one revision. Reasons that still cite nothing are dropped, so the model can connect findings but can't invent them.
 - **A safety floor.** A blocklisted link or a named SEC warning can never come back as "looks safe", whatever the model says.
+- **A trace** logs where the data came from, which model handled each request and what the evaluator decided. `check` prints it; `check --json` includes it.
 - Verdicts: 🔴 scam, 🟠 likely scam, 🟡 not sure (with what to check), 🟢 looks genuine.
+
+## Sponsor stack
+
+| Layer | What CheckAm uses it for | Code |
+|---|---|---|
+| **Zetaris** (data layer) | The official accounts, regulator warnings and rules, and SEC operator names are Lightning REST tables and views in Zetaris (`checkam.official_accounts`, `checkam.regulator_warnings`, `checkam.regulator_rules`, `checkam.sec_notices`), loaded with SQL over its REST API | `checkam/zetaris.py`, `checkam/data/zetaris_setup.sql` |
+| **Meterless Nightshift** (AI provider) | Every verdict request goes to Nightshift's OpenAI-compatible Runtime, which serves a Nemotron lane | `ask_meterless` in `checkam/reasoner.py` |
+| **Meterless H-MEM** (engine) | Memory across sessions and users of the account numbers, phones, sites and handles scammers reuse | `checkam/hmem.py`, `checkam/sources/memory.py`, [docs/HMEM.md](docs/HMEM.md) |
+| **NVIDIA Nemotron** | Connects the findings and writes the explanation, in English or Pidgin | via Nightshift, or NVIDIA's API as fallback |
+
+Without Zetaris or Nightshift, CheckAm runs in sample mode: the same data from the bundled JSON files, and NVIDIA's API, Gemini or offline rules for the verdict. The trace says which was used.
 
 ## Run it
 
@@ -55,6 +67,7 @@ Python 3.10+.
 pip install -r requirements.txt
 cp .env.example .env            # add whatever keys you have; all optional
 python -m checkam refresh       # download blocklists + SEC warnings (run daily)
+python -m checkam zetaris       # optional: register the data in Zetaris and check it loads
 python -m checkam check "Pay N5,000 to unlock your OPay loan: opay-loans.xyz"
 python -m checkam run           # start Telegram / Discord / WhatsApp, whichever have tokens
 ```
@@ -85,7 +98,7 @@ python -m checkam run           # start Telegram / Discord / WhatsApp, whichever
 ## Tests
 
 ```bash
-python -m pytest -q     # 24 tests, all offline
+python -m pytest -q     # 51 tests, all offline
 ```
 
 MIT licence.

@@ -1,7 +1,9 @@
 """Turns numbered evidence into a verdict. The model must cite evidence for every reason; uncited reasons are dropped.
 
-Order: NVIDIA Nemotron (sponsor model) -> Gemini -> offline rules. Whatever answers, a safety floor applies:
-strong scam evidence can never come back as "looks safe".
+Order: Nemotron through Meterless Nightshift -> Nemotron through NVIDIA's API -> Gemini -> offline rules.
+An evaluator checks each draft (valid JSON, every reason cited, no clash with decisive evidence) and sends one
+revision request back to the same model when it isn't. Whatever answers, a safety floor applies: strong scam
+evidence can never come back as "looks safe". Every step goes into the verdict's trace.
 """
 
 from __future__ import annotations
@@ -50,8 +52,9 @@ class Verdict:
     headline: str
     reasons: list[Reason]
     advice: str
-    reasoner: str  # "nvidia/<model>", "gemini/<model>", "offline"
+    reasoner: str  # "meterless:<model>", "nvidia/<model>", "gemini/<model>", "offline"
     notes: list[str] = field(default_factory=list)
+    trace: list[str] = field(default_factory=list)  # each step: which model was asked, what the evaluator found
 
 
 def evidence_block(evidence: list[Evidence]) -> str:
@@ -156,18 +159,58 @@ def parse(raw: str, evidence: list[Evidence], reasoner: str) -> Verdict | None:
 
 # Tried in order when the configured model isn't served to this key (NVIDIA answers 404 per account).
 NEMOTRON = ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]
+_routes: dict[str, str] = {}  # Nightshift base URL -> model route picked from its /models list
 
 
-async def ask_nvidia(settings: Settings, message: str, evidence: list[Evidence], client: httpx.AsyncClient) -> tuple[str, str]:
-    """Returns (reply, model that answered)."""
+def chat_messages(message: str, evidence: list[Evidence], revise: str = "") -> list[dict]:
+    user = user_prompt(message, evidence)
+    if revise:
+        user += f"\n\nYour previous reply had problems:\n{revise}\nReply again with corrected JSON only."
+    return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+
+
+def meterless_headers(settings: Settings) -> dict:
+    return {"Authorization": f"Bearer {settings.meterless_runtime_token}", "meterless-app": "checkam",
+            "meterless-scope": "user", "Accept": "application/json"}
+
+
+async def meterless_route(settings: Settings, client: httpx.AsyncClient) -> str:
+    """The model to ask Nightshift for: the configured one, else a Nemotron-backed route, else meterless/auto."""
+    if settings.meterless_model:
+        return settings.meterless_model
+    base = settings.meterless_base_url
+    if base not in _routes:
+        r = await client.get(f"{base}/models", headers=meterless_headers(settings), timeout=20)
+        if r.status_code in (401, 403):
+            raise PermissionError("Nightshift rejected the runtime token (copy it again from Nightshift's Console)")
+        r.raise_for_status()
+        ids = [m.get("id", "") for m in r.json().get("data", [])]
+        nemotron = [i for i in ids if "nemotron" in i.lower()]
+        _routes[base] = nemotron[0] if nemotron else ("meterless/auto" if "meterless/auto" in ids or not ids else ids[0])
+    return _routes[base]
+
+
+async def ask_meterless(settings: Settings, messages: list[dict], client: httpx.AsyncClient) -> tuple[str, str]:
+    """Meterless Nightshift, the primary provider. Returns (reply, the model Nightshift says handled it)."""
+    if settings.meterless_runtime_token.strip() in ("", "rt-local"):
+        raise PermissionError("set METERLESS_RUNTIME_TOKEN to the token from Nightshift's Console")
+    route = await meterless_route(settings, client)
+    body = {"model": route, "messages": messages, "temperature": 0.2, "max_tokens": 4096}
+    r = await client.post(f"{settings.meterless_base_url}/chat/completions", json=body, timeout=180,  # lanes may load a model
+                          headers=meterless_headers(settings))
+    if r.status_code in (401, 403):
+        raise PermissionError("Nightshift rejected the runtime token")
+    r.raise_for_status()
+    data = r.json()
+    return data["choices"][0]["message"].get("content") or "", f"meterless:{data.get('model') or route}"
+
+
+async def ask_nvidia(settings: Settings, messages: list[dict], client: httpx.AsyncClient) -> tuple[str, str]:
+    """NVIDIA's own API, the fallback when Nightshift isn't running. Returns (reply, model that answered)."""
     models = list(dict.fromkeys([settings.nvidia_model, *NEMOTRON]))
     for model in models:
-        body = {
-            "model": model,
-            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt(message, evidence)}],
-            "temperature": 0.2,
-            "max_tokens": 4096,  # Nemotron reasons before answering; the reasoning comes back separately
-        }
+        body = {"model": model, "messages": messages, "temperature": 0.2,
+                "max_tokens": 4096}  # Nemotron reasons before answering; the reasoning comes back separately
         r = await client.post(f"{settings.nvidia_base_url}/chat/completions", json=body, timeout=90,
                               headers={"Authorization": f"Bearer {settings.nvidia_api_key}", "Accept": "application/json"})
         if r.status_code == 404 and model != models[-1]:
@@ -178,37 +221,62 @@ async def ask_nvidia(settings: Settings, message: str, evidence: list[Evidence],
     raise RuntimeError("no Nemotron model available")
 
 
-async def ask_gemini(settings: Settings, message: str, evidence: list[Evidence]) -> str:
+async def ask_gemini(settings: Settings, messages: list[dict], client: httpx.AsyncClient) -> tuple[str, str]:
     import asyncio
 
     from google import genai
     from google.genai import types
 
     def call() -> str:
-        client = genai.Client(api_key=settings.gemini_api_key)
-        resp = client.models.generate_content(
-            model=settings.gemini_model, contents=user_prompt(message, evidence),
-            config=types.GenerateContentConfig(system_instruction=SYSTEM, temperature=0.2, response_mime_type="application/json"))
+        gemini = genai.Client(api_key=settings.gemini_api_key)
+        resp = gemini.models.generate_content(
+            model=settings.gemini_model, contents=messages[-1]["content"],
+            config=types.GenerateContentConfig(system_instruction=messages[0]["content"], temperature=0.2,
+                                               response_mime_type="application/json"))
         return resp.text or ""
 
-    return await asyncio.to_thread(call)
+    return await asyncio.to_thread(call), f"gemini/{settings.gemini_model}"
+
+
+PROVIDERS = {"meterless": ask_meterless, "nvidia": ask_nvidia, "gemini": ask_gemini}
+
+
+def problems(v: Verdict | None) -> str:
+    """The evaluator: what's wrong with a draft, in words the model can act on. Empty means accepted."""
+    if v is None:
+        return "- It wasn't valid JSON with a verdict from the list and at least one reason citing finding ids."
+    return "\n".join(f"- {n}." for n in v.notes)
+
+
+def available(settings: Settings) -> list[str]:
+    order = {"meterless": ["meterless", "nvidia", "gemini"], "nvidia": ["nvidia", "gemini"], "gemini": ["gemini"],
+             "offline": []}[settings.reasoner]
+    keys = {"meterless": settings.meterless_runtime_token, "nvidia": settings.nvidia_api_key, "gemini": settings.gemini_api_key}
+    return [name for name in order if keys[name]]
 
 
 async def decide(settings: Settings, message: str, evidence: list[Evidence], client: httpx.AsyncClient) -> Verdict:
-    order = {"nvidia": ["nvidia", "gemini"], "gemini": ["gemini"], "offline": []}[settings.reasoner]
-    for name in order:
-        if name == "nvidia" and not settings.nvidia_api_key or name == "gemini" and not settings.gemini_api_key:
-            continue
-        try:
-            if name == "nvidia":
-                raw, model = await ask_nvidia(settings, message, evidence, client)
-            else:
-                raw, model = await ask_gemini(settings, message, evidence), settings.gemini_model
-        except Exception as exc:  # network, quota, bad key: fall through to the next reasoner
-            log.warning("%s reasoner failed: %s", name, exc)
-            continue
-        v = parse(raw, evidence, model if name == "nvidia" else f"gemini/{model}")
-        if v:
-            return v
-        log.warning("%s reply had no usable cited verdict", name)
-    return offline(evidence)
+    trace: list[str] = []
+    for name in available(settings):
+        revise, best = "", None
+        for attempt in (1, 2):  # a draft, then at most one revision after the evaluator's feedback
+            try:
+                raw, model = await PROVIDERS[name](settings, chat_messages(message, evidence, revise), client)
+            except Exception as exc:  # network, quota, bad key, Nightshift not running: fall through to the next provider
+                log.warning("%s reasoner failed: %s", name, exc)
+                trace.append(f"{name}: unavailable ({str(exc)[:120]})")
+                break
+            v = parse(raw, evidence, model)
+            revise = problems(v)
+            trace.append(f"{model} {'drafted' if attempt == 1 else 'revised'} a verdict; evaluator: "
+                         + (revise.replace("\n", " ") if revise else "accepted"))
+            if v and (best is None or len(v.notes) <= len(best.notes)):
+                best = v
+            if not revise:
+                break
+        if best:
+            best.trace = trace
+            return best
+    v = offline(evidence)
+    v.trace = trace + ["offline rules decided"]
+    return v

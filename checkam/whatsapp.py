@@ -17,7 +17,7 @@ import httpx
 from aiohttp import web
 
 from .agent import Checker
-from .chat import WELCOME, RateLimiter, is_greeting, limit_reason
+from .chat import FAILED, WELCOME, RateLimiter, is_greeting, keep_typing, limit_reason
 from .config import Settings
 from .render import chat_text
 from .store import Store
@@ -58,13 +58,21 @@ class WhatsApp:
         self.http = httpx.AsyncClient(timeout=20)
         self.tasks: set[asyncio.Task] = set()
 
+    def _messages_url(self) -> str:
+        s = self.settings
+        return f"https://graph.facebook.com/{s.whatsapp_graph_version}/{s.whatsapp_phone_number_id}/messages"
+
+    async def typing(self, msg_id: str) -> None:
+        """Blue ticks plus "typing…" on their phone while the check runs."""
+        body = {"messaging_product": "whatsapp", "status": "read", "message_id": msg_id, "typing_indicator": {"type": "text"}}
+        await self.http.post(self._messages_url(), json=body, headers={"Authorization": f"Bearer {self.settings.whatsapp_token}"})
+
     async def send(self, to: str, text: str, reply_to: str = "") -> None:
         s = self.settings
         body = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text[:4000], "preview_url": False}}
         if reply_to:
             body["context"] = {"message_id": reply_to}
-        r = await self.http.post(f"https://graph.facebook.com/{s.whatsapp_graph_version}/{s.whatsapp_phone_number_id}/messages",
-                                 json=body, headers={"Authorization": f"Bearer {s.whatsapp_token}"})
+        r = await self.http.post(self._messages_url(), json=body, headers={"Authorization": f"Bearer {s.whatsapp_token}"})
         if r.status_code >= 300:
             log.warning("WhatsApp send failed %s: %s", r.status_code, r.text[:300])
 
@@ -77,7 +85,13 @@ class WhatsApp:
         if reason:
             await self.send(sender, reason, msg_id)
             return
-        report = await self.checker.check(text, "whatsapp", user)
+        try:
+            async with keep_typing(lambda: self.typing(msg_id), every=20):
+                report = await self.checker.check(text, "whatsapp", user)
+        except Exception:
+            log.exception("check failed")
+            await self.send(sender, FAILED, msg_id)
+            return
         await self.send(sender, chat_text(report), msg_id)
 
     async def verify(self, request: web.Request) -> web.Response:

@@ -9,7 +9,7 @@ from telegram.constants import ChatAction, ChatType
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from .agent import Checker
-from .chat import WELCOME, RateLimiter, is_greeting, limit_reason, worth_checking_in_group
+from .chat import FAILED, WELCOME, RateLimiter, checking, is_greeting, keep_typing, limit_reason, worth_checking_in_group
 from .config import Settings
 from .render import chat_text
 from .store import Store
@@ -69,14 +69,27 @@ class TelegramBot:
             if not quiet:
                 await target.reply_text(reason)
             return
-        if not quiet:
-            await update.effective_chat.send_action(ChatAction.TYPING)
-        report = await self.checker.check(text, "telegram", user)
-        if quiet and report.verdict.verdict not in ALARM:
-            return  # in groups, only interrupt for likely scams
+        if quiet:
+            report = await self.checker.check(text, "telegram", user)
+            if report.verdict.verdict not in ALARM:
+                return  # in groups, only interrupt for likely scams
+        else:
+            placeholder = await target.reply_text(checking(text))
+            try:
+                async with keep_typing(lambda: update.effective_chat.send_action(ChatAction.TYPING), every=4):
+                    report = await self.checker.check(text, "telegram", user)
+            except Exception:
+                log.exception("check failed")
+                await placeholder.edit_text(FAILED)
+                return
         await update.effective_chat.send_message(
             chat_text(report), link_preview_options=NO_PREVIEW,
             reply_parameters=ReplyParameters(message_id=target.message_id, allow_sending_without_reply=True))
+        if not quiet:
+            try:  # the verdict arrives as a new message so the phone buzzes; then the placeholder goes
+                await placeholder.delete()
+            except Exception as exc:
+                log.debug("couldn't remove placeholder: %s", exc)
 
 
 def build(settings: Settings, store: Store, checker: Checker) -> Application:

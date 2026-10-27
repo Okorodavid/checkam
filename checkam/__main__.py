@@ -93,7 +93,10 @@ def main(argv: list[str] | None = None) -> int:
             print("No chat tokens set. Add TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN or WHATSAPP_TOKEN to .env.")
             return 1
         print(f"Reasoning with: {settings.reasoner}. Blocklist entries: {store.threat_count():,}.")
-        asyncio.run(serve(settings, store))
+        try:
+            asyncio.run(serve(settings, store))
+        except KeyboardInterrupt:
+            print("Stopped.")
     return 0
 
 

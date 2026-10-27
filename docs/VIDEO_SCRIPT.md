@@ -2,12 +2,17 @@
 
 Record your phone screen (Android: swipe down > Screen record, with microphone on). Speak in your own voice. Judges reject AI voice-overs at many events, and yours sounds real. Show the product working in the first 20 seconds.
 
-Before recording: run `python -m checkam refresh` and `python -m checkam run` on the laptop. Keep the laptop awake and plugged in.
+Before recording:
+
+1. On the laptop: `python -m checkam refresh`, then `python -m checkam run`. Keep it plugged in and awake.
+2. For the group scene: in @BotFather send `/setprivacy`, pick the bot, choose **Disable** (otherwise bots can't see group messages). Make a Telegram group with one other person, then add the bot. If it was already in the group, remove it and add it again, or the change doesn't apply.
+3. Copy the five messages below into your phone's notes.
+4. Each check takes 10 to 30 seconds. The bot shows "🔎 Checking…" at once, then the verdict. Cut the wait when you edit.
 
 | Time | Screen | You say |
 |---|---|---|
 | 0:00-0:15 | The fake OPay loan text on your phone | "My mum got this: her OPay loan is approved, she just has to pay five thousand naira to unlock it. She nearly paid. Millions of Nigerians get messages like this every week." |
-| 0:15-0:40 | Long-press, forward it to CheckAm. The reply arrives | "So I built CheckAm. You forward it any message you're not sure about. It investigates, and it tells you why." Read the red verdict and point at reasons 1 and 2. |
+| 0:15-0:40 | Long-press, forward it to CheckAm. "🔎 Checking…" appears, then the verdict (cut the wait) | "So I built CheckAm. You forward it any message you're not sure about. It investigates, and it tells you why." Read the red verdict and point at reasons 1 and 2. |
 | 0:40-1:00 | Scroll to Sources, tap the opayweb.com link | "Every reason has a source you can check yourself. This link uses OPay's name, but OPay's real website is opayweb.com, and there's no public record of who registered this one." |
 | 1:00-1:20 | Send: "Join CBEX, guaranteed 40% monthly returns" | "Investment schemes too. It knows the SEC publicly warned about CBEX in June 2025, because it reads the SEC's illegal-operator notices." |
 | 1:20-1:40 | Send a phishing link from the blocklist, then a genuine `gtbank.com` message | "Links are checked against over 150,000 known phishing sites. And it's not paranoid: a real GTBank message comes back green." |

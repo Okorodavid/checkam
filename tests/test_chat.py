@@ -34,3 +34,25 @@ def test_whatsapp_payload_and_signature():
     sig = "sha256=" + hmac.new(b"secret", body, hashlib.sha256).hexdigest()
     assert valid_signature("secret", body, sig) and not valid_signature("secret", body, "sha256=bad")
     assert valid_signature("", body, None)
+
+
+def test_checking_message_matches_the_language():
+    from checkam.chat import checking
+    assert checking("Is this OPay loan real?") == "🔎 Checking…"
+    assert checking("Abeg check am, dem say make I pay") == "🔎 I dey check am…"
+
+
+async def test_typing_signal_repeats_until_the_check_ends():
+    import asyncio
+
+    from checkam.chat import keep_typing
+    sent = []
+
+    async def send():
+        sent.append(1)
+
+    async with keep_typing(send, every=0.01):
+        await asyncio.sleep(0.05)
+    count = len(sent)
+    await asyncio.sleep(0.03)
+    assert count >= 3 and len(sent) == count  # stops once the block ends

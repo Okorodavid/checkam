@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from typing import Awaitable, Callable
 
 from .config import Settings
 from .evidence import extract
+from .reasoner import language
 from .sources import patterns
 from .store import Store
 
@@ -17,8 +22,35 @@ WELCOME = (
     "I never ask for your PIN, OTP, BVN or passwords. Don't send them to anyone."
 )
 LIMITED = "You've sent a lot of checks in a short time. Please wait a few minutes and try again."
+FAILED = "Sorry, something went wrong while checking. Please send it again."
 BUSY = "I've reached today's limit of checks. Please try again tomorrow."
+CHECKING = {"English": "🔎 Checking…", "Nigerian Pidgin": "🔎 I dey check am…"}
 GREETING = re.compile(r"(?i)^\s*(hi|hello|hey|good (morning|afternoon|evening)|start|help|menu|how far|thanks?|thank you|ok(ay)?)\W*$")
+
+log = logging.getLogger("checkam.chat")
+
+
+def checking(text: str) -> str:
+    """Sent at once, so people know the bot is working during the 10-30 seconds a check takes."""
+    return CHECKING[language(text)]
+
+
+@asynccontextmanager
+async def keep_typing(send: Callable[[], Awaitable[object]], every: float):
+    """Repeats a "typing…" signal until the block ends. Apps drop it on their own (Telegram after 5 s, WhatsApp 25 s)."""
+    async def loop() -> None:
+        while True:
+            try:
+                await send()
+            except Exception as exc:  # a missed typing signal never matters enough to stop a check
+                log.debug("typing signal failed: %s", exc)
+            await asyncio.sleep(every)
+
+    task = asyncio.create_task(loop())
+    try:
+        yield
+    finally:
+        task.cancel()
 
 
 class RateLimiter:

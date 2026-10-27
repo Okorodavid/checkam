@@ -8,12 +8,12 @@ Before recording: run `python -m checkam refresh` and `python -m checkam run` on
 |---|---|---|
 | 0:00-0:15 | The fake OPay loan text on your phone | "My mum got this: her OPay loan is approved, she just has to pay five thousand naira to unlock it. She nearly paid. Millions of Nigerians get messages like this every week." |
 | 0:15-0:40 | Long-press, forward it to CheckAm. The reply arrives | "So I built CheckAm. You forward it any message you're not sure about. It investigates, and it tells you why." Read the red verdict and point at reasons 1 and 2. |
-| 0:40-1:00 | Scroll to Sources, tap the RDAP link | "Every reason has a source you can check yourself. This site was created five days ago. It's using OPay's name, but it's not OPay's website." |
+| 0:40-1:00 | Scroll to Sources, tap the opayweb.com link | "Every reason has a source you can check yourself. This link uses OPay's name, but OPay's real website is opayweb.com, and there's no public record of who registered this one." |
 | 1:00-1:20 | Send: "Join CBEX, guaranteed 40% monthly returns" | "Investment schemes too. It knows the SEC publicly warned about CBEX in June 2025, because it reads the SEC's illegal-operator notices." |
 | 1:20-1:40 | Send a phishing link from the blocklist, then a genuine `gtbank.com` message | "Links are checked against over 150,000 known phishing sites. And it's not paranoid: a real GTBank message comes back green." |
 | 1:40-2:00 | Send the Pidgin NNPC recruitment message, show the Pidgin reply | "It answers in the language you write in. Pidgin in, Pidgin out." |
 | 2:00-2:15 | A family WhatsApp or Telegram group where someone posts a scam and CheckAm warns the group | "Add it to your family group, and it only speaks up when something looks like a scam." |
-| 2:15-2:30 | Laptop: `python -m checkam check ... ` showing E1 to E6 and "via nvidia/nemotron" | "Under the hood, seven sources run at once. NVIDIA Nemotron connects the findings, and every reason must cite real evidence or it gets thrown out. Check am before you pay." |
+| 2:15-2:30 | Laptop: `python -m checkam check ... ` showing every finding and "via nvidia/nemotron-3-ultra" | "Under the hood, seven sources run at once. NVIDIA Nemotron connects the findings, and every reason must cite real evidence or it gets thrown out. Check am before you pay." |
 
 Messages to send (copy them to your phone notes first):
 

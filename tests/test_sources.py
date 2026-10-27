@@ -14,6 +14,7 @@ def test_extract_finds_links_phones_accounts_handles():
 def test_registrable_domain_handles_ng_second_level():
     assert registrable_domain("login.firstbank.com.ng") == "firstbank.com.ng"
     assert registrable_domain("www.opayweb.com") == "opayweb.com"
+    assert registrable_domain("www.roblox.com.et") == "roblox.com.et"  # any country's com./co./gov. second level
 
 
 def test_patterns_catch_advance_fee_and_secrets_once():

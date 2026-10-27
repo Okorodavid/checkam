@@ -57,10 +57,15 @@ FREE_HOSTS = {"eu.org", "vercel.app", "netlify.app", "github.io", "pages.dev", "
               "godaddysites.com", "mystrikingly.com", "square.site", "wordpress.com", "r2.dev", "surge.sh"}
 
 
+# Country domains usually sell names under these: roblox.com.et, gov.za, ac.ke.
+SECOND_LEVEL = {"com", "net", "org", "gov", "edu", "co", "ac", "mil", "sch", "gob", "nic", "biz", "info"}
+
+
 def registrable_domain(host: str) -> str:
     host = host.lower().strip(".").removeprefix("www.")
     parts = host.split(".")
-    if len(parts) >= 3 and ".".join(parts[-2:]) in TWO_PART_TLDS | FREE_HOSTS:
+    country_style = len(parts[-1]) == 2 and parts[-2] in SECOND_LEVEL
+    if len(parts) >= 3 and (country_style or ".".join(parts[-2:]) in TWO_PART_TLDS | FREE_HOSTS):
         return ".".join(parts[-3:])
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 

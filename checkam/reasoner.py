@@ -32,7 +32,7 @@ Rules:
 - "looks_safe" only when findings positively show it is real (for example its link is the company's real website) and nothing points to a scam.
 - "not_sure" when there is too little to judge. Then say what to check.
 - advice: one or two sentences telling them exactly what to do now (don't pay, don't share codes, call the bank on the number on the back of your card, block and report, etc.).
-- Write in the language of the message. If it's Nigerian Pidgin, answer in simple Pidgin. Otherwise plain English, no jargon.
+- Write headline, reasons and advice in the reply language given after the findings: plain English with no jargon, or simple Nigerian Pidgin.
 
 Reply with only this JSON:
 {"verdict": "...", "headline": "max 10 words", "reasons": [{"text": "...", "evidence": ["E1"]}], "advice": "..."}"""
@@ -58,8 +58,17 @@ def evidence_block(evidence: list[Evidence]) -> str:
     return "\n".join(f"{e.id} [{e.signal}, strength {e.weight}] ({e.source}) {e.finding}" for e in evidence) or "(no findings)"
 
 
+# Words that mark Nigerian Pidgin. Two or more means the person wrote in Pidgin, so the reply should be in Pidgin too.
+PIDGIN = re.compile(r"(?i)\b(abeg|dey|wetin|una|dem|oga|wahala|sef|abi|shey|sabi|pikin|oya|no be|na im|make i|e don|i don|wey|sha)\b")
+
+
+def language(message: str) -> str:
+    return "Nigerian Pidgin" if len(PIDGIN.findall(message)) >= 2 else "English"
+
+
 def user_prompt(message: str, evidence: list[Evidence]) -> str:
-    return f"Forwarded message:\n\"\"\"\n{message[:3000]}\n\"\"\"\n\nFindings:\n{evidence_block(evidence)}"
+    return (f"Forwarded message:\n\"\"\"\n{message[:3000]}\n\"\"\"\n\nFindings:\n{evidence_block(evidence)}\n\n"
+            f"Reply language: {language(message)}")
 
 
 def score(evidence: list[Evidence]) -> tuple[int, bool, int]:
@@ -145,17 +154,28 @@ def parse(raw: str, evidence: list[Evidence], reasoner: str) -> Verdict | None:
     return v
 
 
-async def ask_nvidia(settings: Settings, message: str, evidence: list[Evidence], client: httpx.AsyncClient) -> str:
-    body = {
-        "model": settings.nvidia_model,
-        "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt(message, evidence)}],
-        "temperature": 0.2,
-        "max_tokens": 1200,
-    }
-    r = await client.post(f"{settings.nvidia_base_url}/chat/completions", json=body, timeout=60,
-                          headers={"Authorization": f"Bearer {settings.nvidia_api_key}", "Accept": "application/json"})
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"].get("content") or ""
+# Tried in order when the configured model isn't served to this key (NVIDIA answers 404 per account).
+NEMOTRON = ["nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]
+
+
+async def ask_nvidia(settings: Settings, message: str, evidence: list[Evidence], client: httpx.AsyncClient) -> tuple[str, str]:
+    """Returns (reply, model that answered)."""
+    models = list(dict.fromkeys([settings.nvidia_model, *NEMOTRON]))
+    for model in models:
+        body = {
+            "model": model,
+            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_prompt(message, evidence)}],
+            "temperature": 0.2,
+            "max_tokens": 4096,  # Nemotron reasons before answering; the reasoning comes back separately
+        }
+        r = await client.post(f"{settings.nvidia_base_url}/chat/completions", json=body, timeout=90,
+                              headers={"Authorization": f"Bearer {settings.nvidia_api_key}", "Accept": "application/json"})
+        if r.status_code == 404 and model != models[-1]:
+            log.warning("%s isn't available to this key, trying the next Nemotron model", model)
+            continue
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"].get("content") or "", model
+    raise RuntimeError("no Nemotron model available")
 
 
 async def ask_gemini(settings: Settings, message: str, evidence: list[Evidence]) -> str:
@@ -180,12 +200,14 @@ async def decide(settings: Settings, message: str, evidence: list[Evidence], cli
         if name == "nvidia" and not settings.nvidia_api_key or name == "gemini" and not settings.gemini_api_key:
             continue
         try:
-            raw = await (ask_nvidia(settings, message, evidence, client) if name == "nvidia" else ask_gemini(settings, message, evidence))
+            if name == "nvidia":
+                raw, model = await ask_nvidia(settings, message, evidence, client)
+            else:
+                raw, model = await ask_gemini(settings, message, evidence), settings.gemini_model
         except Exception as exc:  # network, quota, bad key: fall through to the next reasoner
             log.warning("%s reasoner failed: %s", name, exc)
             continue
-        model = settings.nvidia_model if name == "nvidia" else settings.gemini_model
-        v = parse(raw, evidence, f"{name}/{model}")
+        v = parse(raw, evidence, model if name == "nvidia" else f"gemini/{model}")
         if v:
             return v
         log.warning("%s reply had no usable cited verdict", name)

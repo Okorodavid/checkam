@@ -22,7 +22,7 @@ class Settings:
     # Reasoning model. "auto" = NVIDIA Nemotron if a key is set, else Gemini if a key is set, else offline rules.
     provider: str = "auto"
     nvidia_api_key: str = ""
-    nvidia_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    nvidia_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"

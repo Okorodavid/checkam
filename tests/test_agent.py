@@ -66,3 +66,38 @@ def test_offline_rules():
     assert offline(ev(("a", SCAM, 3))).verdict == "likely_scam"
     assert offline(ev(("a", SAFE, 1))).verdict == "looks_safe"
     assert offline(ev(("a", CAUTION, 1))).verdict == "not_sure"
+
+
+def test_reply_language_follows_the_message():
+    from checkam.reasoner import language
+    assert language(MUM) == "English"
+    assert language("Abeg check am: dem say make I pay 3k registration fee for NNPC recruitment") == "Nigerian Pidgin"
+
+
+def test_findings_from_the_same_source_share_one_number():
+    from checkam.agent import Report
+    from checkam.evidence import Entities
+    from checkam.reasoner import Reason, Verdict
+    evidence = ev(("fee first", SCAM, 3), ("act fast", CAUTION, 1))
+    verdict = Verdict("scam", "This is a scam.", [Reason("Fee and pressure.", ["E1", "E2"])], "Don't pay.", "offline")
+    text = chat_text(Report(MUM, Entities(text=MUM), evidence, verdict, 0.1))
+    assert "Fee and pressure. [1]" in text
+    assert text.count("[1] s") == 1 and "[2]" not in text
+
+
+async def test_nemotron_falls_back_when_a_model_is_not_served():
+    import httpx
+    from checkam.config import Settings
+    from checkam.reasoner import NEMOTRON, ask_nvidia
+    asked = []
+
+    def nvidia(request):
+        model = json.loads(request.content)["model"]
+        asked.append(model)
+        if model == NEMOTRON[0]:
+            return httpx.Response(404, json={"detail": "Not found for account"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(nvidia)) as client:
+        _, model = await ask_nvidia(Settings(nvidia_api_key="k"), "hi", [], client)
+    assert asked[:2] == NEMOTRON[:2] and model == NEMOTRON[1]

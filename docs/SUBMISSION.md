@@ -37,7 +37,7 @@ It answers in the language you used, including Nigerian Pidgin. Anyone can messa
    - Reports from other CheckAm users of the same account number, phone, site or handle.
    - Web and X search about the company (Tavily).
 3. **Number every finding** (E1, E2, ...).
-4. **Reason with NVIDIA Nemotron** (`nemotron-3-super-120b-a12b`). It connects the findings into one verdict, for example: a five-day-old site, plus a fake OPay name, plus a pay-to-unlock fee, means a scam.
+4. **Reason with NVIDIA Nemotron** (`nemotron-3-ultra-550b-a55b`). It connects the findings into one verdict, for example: a fake OPay name, plus a pay-to-unlock fee, plus a cheap .xyz site with no registration record, means a scam.
 5. **Verify the reasoning.** Every reason must cite real finding ids. Reasons that cite nothing, or an id that doesn't exist, are dropped. A safety floor means a blocklisted link or a named SEC warning can never be called safe. If the model is unreachable, built-in rules still give a cited verdict.
 
 So the explanation isn't decoration: each sentence the user reads can be traced to a check they could repeat themselves.
@@ -58,7 +58,7 @@ Message text is never stored. Only the things scammers reuse are kept: account n
 
 ## What I built in the hackathon window
 
-All of CheckAm is new: the evidence sources, the SEC warning extractor, the blocklist matching, the cited-reasoning agent with its safety floor, and the Telegram, Discord and WhatsApp adapters, with 21 offline tests. I reused patterns from my earlier open-source support bot (CommunityOps) for the Telegram and Discord plumbing.
+All of CheckAm is new: the evidence sources, the SEC warning extractor, the blocklist matching, the cited-reasoning agent with its safety floor, and the Telegram, Discord and WhatsApp adapters, with 24 offline tests. I reused patterns from my earlier open-source support bot (CommunityOps) for the Telegram and Discord plumbing.
 
 ## What's next
 

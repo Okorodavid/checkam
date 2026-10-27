@@ -42,7 +42,7 @@ Every message goes through the same steps. Each source looks at one thing and re
 
 Then a reasoning model reads the numbered findings and writes the verdict:
 
-- **NVIDIA Nemotron** (`nvidia/nemotron-3-super-120b-a12b` on build.nvidia.com) is the main reasoner. Gemini is the fallback. With no key at all, built-in rules decide.
+- **NVIDIA Nemotron** (`nvidia/nemotron-3-ultra-550b-a55b` on build.nvidia.com) is the main reasoner. Gemini is the fallback. With no key at all, built-in rules decide.
 - **Every reason must cite finding ids.** Reasons that cite nothing, or cite a finding that doesn't exist, are dropped before anyone sees them. The model can connect findings but can't invent them.
 - **A safety floor.** A blocklisted link or a named SEC warning can never come back as "looks safe", whatever the model says.
 - Verdicts: 🔴 scam, 🟠 likely scam, 🟡 not sure (with what to check), 🟢 looks genuine.
@@ -85,7 +85,7 @@ python -m checkam run           # start Telegram / Discord / WhatsApp, whichever
 ## Tests
 
 ```bash
-python -m pytest -q     # 21 tests, all offline
+python -m pytest -q     # 24 tests, all offline
 ```
 
 MIT licence.

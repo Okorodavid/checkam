@@ -11,24 +11,26 @@ WHY = {"en": "Why", "pcm": "Why"}
 def chat_text(report: Report, max_len: int = 3500) -> str:
     v = report.verdict
     by_id = {e.id: e for e in report.evidence}
-    # number sources in the order reasons cite them
-    cited: list[str] = []
+    # number sources in the order reasons cite them; findings from the same source and link share a number
+    sources: list[tuple[str, str]] = []
+    num: dict[str, int] = {}
     for r in v.reasons:
         for i in r.evidence:
-            if i in by_id and i not in cited:
-                cited.append(i)
-    num = {eid: n for n, eid in enumerate(cited, 1)}
+            if i in by_id and i not in num:
+                key = (by_id[i].source, by_id[i].url)
+                if key not in sources:
+                    sources.append(key)
+                num[i] = sources.index(key) + 1
 
     lines = [f"{BADGE.get(v.verdict, '🟡')} {v.headline}", "", "Why:"]
     for k, r in enumerate(v.reasons, 1):
-        refs = "".join(f"[{num[i]}]" for i in r.evidence if i in num)
+        refs = "".join(f"[{n}]" for n in dict.fromkeys(num[i] for i in r.evidence if i in num))
         lines.append(f"{k}. {r.text} {refs}".rstrip())
     lines += ["", v.advice]
-    sources = [(num[i], by_id[i]) for i in cited]
     if sources:
         lines += ["", "Sources:"]
-        for n, e in sources:
-            lines.append(f"[{n}] {e.source}" + (f": {e.url}" if e.url else ""))
+        for n, (source, url) in enumerate(sources, 1):
+            lines.append(f"[{n}] {source}" + (f": {url}" if url else ""))
     text = "\n".join(lines)
     return text if len(text) <= max_len else text[: max_len - 1] + "…"
 

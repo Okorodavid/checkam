@@ -81,7 +81,9 @@ class TelegramBot:
 
 def build(settings: Settings, store: Store, checker: Checker) -> Application:
     bot = TelegramBot(settings, store, checker)
-    app = Application.builder().token(settings.telegram_token).build()
+    # Generous timeouts: Telegram's 5-second default is too short on slow mobile and Nigerian networks.
+    app = (Application.builder().token(settings.telegram_token)
+           .connect_timeout(30).read_timeout(30).write_timeout(30).get_updates_read_timeout(60).build())
     app.add_handler(CommandHandler(["start", "help"], bot.on_start))
     app.add_handler(CommandHandler("check", bot.on_check))
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION) & ~filters.COMMAND, bot.on_message))

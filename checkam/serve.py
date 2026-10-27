@@ -28,7 +28,15 @@ async def serve(settings: Settings, store: Store) -> None:
         if settings.telegram_token:
             from .telegram_bot import build as build_telegram
             tg = build_telegram(settings, store, checker)
-            await tg.initialize()
+            for attempt in range(1, 4):  # a slow network shouldn't stop the whole service
+                try:
+                    await tg.initialize()
+                    break
+                except Exception as exc:
+                    if attempt == 3:
+                        raise
+                    log.warning("Telegram didn't answer (%s), retrying", exc)
+                    await asyncio.sleep(5 * attempt)
             await tg.updater.start_polling()
             await tg.start()
             log.info("Telegram polling as @%s", tg.bot.username)

@@ -1,0 +1,11 @@
+[project]
+name = "checkam"
+version = "0.1.0"
+description = "Forward a suspicious message, link or account number; get a scam verdict with the evidence behind it."
+requires-python = ">=3.10"
+license = "MIT"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore:'audioop' is deprecated:DeprecationWarning"]

@@ -1,0 +1,37 @@
+{
+  "_note": "Snapshot of regulator warnings and rules, each with its public source. `checkam refresh` adds live SEC notices on top. Collected 2026-10-27.",
+  "warned": [
+    {
+      "name": "GVEST Global",
+      "aliases": ["gvest global", "gvest"],
+      "regulator": "SEC Nigeria",
+      "date": "2025-08",
+      "finding": "SEC Nigeria publicly warned Nigerians against GVEST Global and its affiliates as an unregistered investment scheme (Aug 2025).",
+      "url": "https://proshare.co/articles/sec-warns-public-against-unregistered-investment-scheme-by-gvest-global-and-affiliates"
+    },
+    {
+      "name": "Silverkuun",
+      "aliases": ["silverkuun", "silverkuun investment", "silverkuun limited"],
+      "regulator": "SEC Nigeria",
+      "date": "2026",
+      "finding": "SEC Nigeria said Silverkuun Investment Cooperative Society / Silverkuun Limited is not registered to operate in any capacity in the Nigerian capital market and told the public not to patronise it.",
+      "url": "https://nannews.ng/?p=282933"
+    }
+  ],
+  "rules": [
+    {
+      "id": "sec_unregistered_online",
+      "when": "investment",
+      "regulator": "SEC Nigeria",
+      "finding": "SEC Nigeria's public notice (May 2026) says only firms registered with the Commission may promote investments or collect money from the public, and warns against unregistered online schemes promoted on social media. Check the firm at sec.gov.ng/cmos before paying.",
+      "url": "https://www.sec.gov.ng/for-investors/keep-track-of-circulars/public-notice-unregistered-online-investment-schemes/"
+    },
+    {
+      "id": "fccpc_digital_lenders",
+      "when": "loan",
+      "regulator": "FCCPC",
+      "finding": "Loan apps in Nigeria must be on the FCCPC register of approved digital lenders (about 505 were approved by June 2026, and 112 were on a watchlist). Check the app on fccpc.gov.ng before borrowing.",
+      "url": "https://nairametrics.com/2026/06/27/fccpc-grants-full-approval-to-48-more-loan-app-companies/"
+    }
+  ]
+}
